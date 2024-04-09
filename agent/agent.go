@@ -50,7 +50,7 @@ func Start() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	agent := &Agent{measure: &metrics.Measure{}, period: 2}
-	agent.validArgumnet()
+	agent.argumentParse()
 	agent.addmetric(system.New(), cpu.New(), memory.New(), disk.New(), network.New())
 
 	go agent.Run()
@@ -69,8 +69,8 @@ func (a *Agent) Close() {
 
 func (a *Agent) Run() {
 	measure := &metrics.Measure{}
-
 	a.OnceProcess(measure)
+
 	for {
 		now := time.Now()
 
@@ -81,6 +81,7 @@ func (a *Agent) Run() {
 			}
 		}
 		measure.Elapse = time.Since(now).String()
+		// mutex
 		*a.measure = *measure
 		measure.Show()
 
@@ -99,7 +100,7 @@ func (a *Agent) OnceProcess(measure *metrics.Measure) {
 	}
 }
 
-func (a *Agent) validArgumnet() {
+func (a *Agent) argumentParse() {
 	port := flag.String("port", "9227", "tcp server port ex) -port=8080")
 	flag.Parse()
 

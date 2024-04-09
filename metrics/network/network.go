@@ -3,6 +3,7 @@ package network
 import (
 	"bufio"
 	"helloServer/metrics"
+	"helloServer/utils"
 	"log"
 	"net"
 	"os"
@@ -17,12 +18,19 @@ func init() {
 		log.Println("'/proc/net/dev' is not exist")
 		os.Exit(1)
 	}
+	if _, err := os.Stat("daily_traffic.csv"); os.IsNotExist(err) {
+		f, err := os.Create("daily_traffic.csv")
+		if err != nil {
+			os.Exit(1)
+		}
+		f.Close()
+	}
 }
 
 const (
 	IFACE    = 0
-	RX_BYTES = 1
-	TX_BYTES = 9
+	RX_INDEX = 1
+	TX_INDEX = 9
 )
 
 type metric struct {
@@ -60,8 +68,8 @@ func (mt *metric) Process(measure *metrics.Measure) error {
 		}
 
 		measure.Network.Iface = fields[IFACE]
-		rxBytes, _ := strconv.ParseFloat(fields[RX_BYTES], 64)
-		txBytes, _ := strconv.ParseFloat(fields[TX_BYTES], 64)
+		rxBytes, _ := strconv.ParseFloat(fields[RX_INDEX], 64)
+		txBytes, _ := strconv.ParseFloat(fields[TX_INDEX], 64)
 
 		if mt.previousRxBytes == 0 && mt.previousTxBytes == 0 {
 			mt.previousRxBytes = rxBytes
@@ -75,9 +83,12 @@ func (mt *metric) Process(measure *metrics.Measure) error {
 		mt.previousRxBytes = rxBytes
 		mt.previousTxBytes = txBytes
 
-		// // // fmt.Println("IP:\t\t", GetLocalIP())
-		// // fmt.Printf("Rx:\t\t%0.2fKB\n", RxUsage/1024)
-		// fmt.Printf("Tx:\t\t%0.2fKB\n", TxUsage/1024)
+		// daily record
+		now := utils.Now()
+		if measure.Network.DailyTime.After(now) {
+
+		}
+
 	}
 
 	return nil
@@ -113,5 +124,8 @@ func GetLocalIPs() ([]net.IP, error) {
 
 func (mt *metric) Once(measure *metrics.Measure) error {
 	measure.Network.IPaddress = GetLocalIP()
+	measure.Network.DailyTime = utils.Now()
+	// 최초 실행 시간 저장
+
 	return nil
 }

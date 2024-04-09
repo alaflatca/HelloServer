@@ -3,6 +3,7 @@ package metrics
 import (
 	"fmt"
 	"math"
+	"time"
 )
 
 type Measure struct {
@@ -41,6 +42,9 @@ type network struct {
 	IPaddress string  `json:"ipAddress"`
 	RxUsage   float64 `json:"rxUsage"`
 	TxUsage   float64 `json:"txUsage"`
+	DailyTime time.Time
+	DailyRx   float64 `json:"dailyRx"`
+	DailyTx   float64 `json:"dailyTx"`
 }
 
 type system struct {

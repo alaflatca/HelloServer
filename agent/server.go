@@ -20,6 +20,7 @@ func (a *Agent) Serve() {
 		conn, err := a.listener.Accept()
 		if err != nil {
 			log.Println(err)
+			return
 		}
 
 		go a.clientHandler(conn)
