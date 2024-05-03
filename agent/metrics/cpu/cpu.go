@@ -2,11 +2,13 @@ package cpu
 
 import (
 	"bufio"
-	"helloServer/metrics"
+	"helloServer/agent/metrics"
+	"helloServer/utils"
 	"log"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -19,11 +21,14 @@ func init() {
 }
 
 type metric struct {
-	previousCPU int64
+	previousCPU  int64
+	criteriaTime time.Time
 }
 
 func New() *metric {
-	return &metric{}
+	return &metric{
+		criteriaTime: utils.Now(),
+	}
 }
 
 func (mt *metric) Process(measure *metrics.Measure) error {
@@ -48,18 +53,33 @@ func (mt *metric) Process(measure *metrics.Measure) error {
 		return errors.Wrap(err, "strconv parseInt error")
 	}
 
+	// cpu 사용률은 현재 사용률 - 이전 사용률 = 사용률
+	// 현재 2초 간격으로 데이터를 가져오고 있음
+	// 이전 CPU 값을 저장하고 2초 후에는 현재 cpu 값이 많이 늘어남 그래서 위 공식대로 계산 시 100을 넘게됨
+
 	if mt.previousCPU == 0 {
 		mt.previousCPU = currentCPU
+		return nil
 	}
-
 	cpuUsage := currentCPU - mt.previousCPU
-	measure.Cpu.Usage = cpuUsage
 
+	measure.Cpu.Usage = cpuUsage
 	mt.previousCPU = currentCPU
+
+	// cpu usage csv
+	if time.Since(mt.criteriaTime) > (10 * time.Second) {
+		mt.criteriaTime = time.Now()
+		// record
+		record := []string{utils.NowString(), strconv.Itoa(int(cpuUsage))}
+		utils.WriteCSV(utils.Metric_CPU_CSV, record)
+	}
 
 	return nil
 }
 
 func (mt *metric) Once(measure *metrics.Measure) error {
+	if err := utils.InitializeCSV(utils.Metric_CPU_CSV); err != nil {
+		return err
+	}
 	return nil
 }

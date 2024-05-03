@@ -2,7 +2,7 @@ package memory
 
 import (
 	"bufio"
-	"helloServer/metrics"
+	"helloServer/agent/metrics"
 	"log"
 	"os"
 	"strconv"

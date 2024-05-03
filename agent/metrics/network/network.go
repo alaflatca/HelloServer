@@ -2,7 +2,7 @@ package network
 
 import (
 	"bufio"
-	"helloServer/metrics"
+	"helloServer/agent/metrics"
 	"helloServer/utils"
 	"log"
 	"net"
@@ -18,8 +18,9 @@ func init() {
 		log.Println("'/proc/net/dev' is not exist")
 		os.Exit(1)
 	}
-	if _, err := os.Stat("daily_traffic.csv"); os.IsNotExist(err) {
-		f, err := os.Create("daily_traffic.csv")
+
+	if _, err := os.Stat("daily_network.csv"); os.IsNotExist(err) {
+		f, err := os.Create("daily_network.csv")
 		if err != nil {
 			os.Exit(1)
 		}
@@ -77,20 +78,22 @@ func (mt *metric) Process(measure *metrics.Measure) error {
 			return nil
 		}
 
-		measure.Network.RxUsage = (rxBytes - mt.previousRxBytes) / metrics.KB
-		measure.Network.TxUsage = (txBytes - mt.previousTxBytes) / metrics.KB
+		measure.Network.RxUsage = float64(rxBytes-mt.previousRxBytes) / metrics.KB
+		measure.Network.TxUsage = float64(txBytes-mt.previousTxBytes) / metrics.KB
 
 		mt.previousRxBytes = rxBytes
 		mt.previousTxBytes = txBytes
 
 		// daily record
-		now := utils.Now()
-		if measure.Network.DailyTime.After(now) {
-
+		daily := utils.NowDaily()
+		if daily.After(measure.Network.DailyTime) { // 2024-04-12 > 2024-04-11
+			measure.Network.DailyTime = daily
+			// utils.dailyWriteCSV
+			// csv format
+			// 2024-04-11,{first_byte},{last_byte - first_byte}
 		}
 
 	}
-
 	return nil
 }
 
@@ -124,8 +127,12 @@ func GetLocalIPs() ([]net.IP, error) {
 
 func (mt *metric) Once(measure *metrics.Measure) error {
 	measure.Network.IPaddress = GetLocalIP()
-	measure.Network.DailyTime = utils.Now()
+	measure.Network.DailyTime = utils.NowDaily()
 	// 최초 실행 시간 저장
+
+	if err := utils.InitializeCSV(utils.Metric_NETWORK_CSV); err != nil {
+		return err
+	}
 
 	return nil
 }
