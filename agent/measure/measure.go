@@ -1,4 +1,4 @@
-package metrics
+package measure
 
 import (
 	"fmt"
@@ -12,7 +12,6 @@ type Measure struct {
 	Memory  memory  `json:"memory"`
 	Network network `json:"network"`
 	System  system  `json:"system"`
-	Elapse  string  `json:"elapse"`
 }
 
 type cpu struct {
@@ -36,9 +35,7 @@ type memory struct {
 }
 
 type network struct {
-	Iface string `json:"iface"`
-	// RxBytes float64
-	// TxBytes float64
+	Iface     string  `json:"iface"`
 	IPaddress string  `json:"ipAddress"`
 	RxUsage   float64 `json:"rxUsage"`
 	TxUsage   float64 `json:"txUsage"`
@@ -74,5 +71,4 @@ func (m *Measure) Show() {
 	fmt.Printf("%s\t\t%s\n", m.Network.Iface, m.Network.IPaddress)
 	fmt.Printf("Rx:\t\t%0.2fKB\n", m.Network.RxUsage)
 	fmt.Printf("Tx:\t\t%0.2fKB\n", m.Network.TxUsage)
-	fmt.Printf("Elapse:\t\t%s\n", m.Elapse)
 }

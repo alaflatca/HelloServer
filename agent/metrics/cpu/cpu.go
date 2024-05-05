@@ -2,7 +2,7 @@ package cpu
 
 import (
 	"bufio"
-	"helloServer/agent/metrics"
+	"helloServer/agent/measure"
 	"helloServer/utils"
 	"log"
 	"os"
@@ -31,7 +31,7 @@ func New() *metric {
 	}
 }
 
-func (mt *metric) Process(measure *metrics.Measure) error {
+func (mt *metric) Process(measure *measure.Measure) error {
 	f, err := os.Open("/proc/stat")
 	if err != nil {
 		return errors.Wrap(err, "'/proc/stat' open error")
@@ -77,7 +77,7 @@ func (mt *metric) Process(measure *metrics.Measure) error {
 	return nil
 }
 
-func (mt *metric) Once(measure *metrics.Measure) error {
+func (mt *metric) Once(measure *measure.Measure) error {
 	if err := utils.InitializeCSV(utils.Metric_CPU_CSV); err != nil {
 		return err
 	}

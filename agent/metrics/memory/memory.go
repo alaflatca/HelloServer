@@ -2,7 +2,7 @@ package memory
 
 import (
 	"bufio"
-	"helloServer/agent/metrics"
+	"helloServer/agent/measure"
 	"log"
 	"os"
 	"strconv"
@@ -28,7 +28,7 @@ func New() *metric {
 // used   Used memory (calculated as total - free - buffers - cache)
 // free   Unused memory (MemFree and SwapFree in /proc/meminfo)
 // avail  = free - reserved filesystem blocks(for root)
-func (mt *metric) Process(measure *metrics.Measure) error {
+func (mt *metric) Process(ms *measure.Measure) error {
 	var err error
 	f, err := os.Open("/proc/meminfo")
 	if err != nil {
@@ -87,14 +87,14 @@ func (mt *metric) Process(measure *metrics.Measure) error {
 	}
 
 	// KB 단위
-	measure.Memory.Total = memoryTotal
-	measure.Memory.Used = memoryTotal - memoryAvailable
-	measure.Memory.Usage = ((memoryTotal - memoryAvailable) / memoryTotal) * float64(100)
-	measure.Memory.Cached = memoryCached / metrics.MB
+	ms.Memory.Total = memoryTotal
+	ms.Memory.Used = memoryTotal - memoryAvailable
+	ms.Memory.Usage = ((memoryTotal - memoryAvailable) / memoryTotal) * float64(100)
+	ms.Memory.Cached = memoryCached / measure.MB
 
 	return nil
 }
 
-func (mt *metric) Once(measure *metrics.Measure) error {
+func (mt *metric) Once(measure *measure.Measure) error {
 	return nil
 }

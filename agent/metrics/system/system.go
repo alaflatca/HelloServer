@@ -3,7 +3,7 @@ package system
 import (
 	"bufio"
 	"fmt"
-	"helloServer/agent/metrics"
+	"helloServer/agent/measure"
 	"log"
 	"os"
 	"strconv"
@@ -32,7 +32,7 @@ func New() *metric {
 	return &metric{}
 }
 
-func (mt *metric) Process(measure *metrics.Measure) error {
+func (mt *metric) Process(measure *measure.Measure) error {
 	uptime, err := GetUptime()
 	if err != nil {
 		return errors.Wrap(err, "Failed to Uptime")
@@ -103,7 +103,7 @@ func (mt *metric) GetOsRelease() (string, error) {
 	return osRelease, nil
 }
 
-func (mt *metric) Once(measure *metrics.Measure) error {
+func (mt *metric) Once(measure *measure.Measure) error {
 	osRelease, err := mt.GetOsRelease()
 	if err != nil {
 		return err

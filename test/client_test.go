@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"helloServer/agent/metrics"
+	"helloServer/agent/measure"
 	"net"
 	"testing"
 )
@@ -26,7 +26,7 @@ func TestClient(t *testing.T) {
 			t.Log("ping")
 			continue
 		}
-		measure := metrics.Measure{}
+		measure := measure.Measure{}
 		if err = json.Unmarshal(data[:n], &measure); err != nil {
 			t.Fatal(err)
 			break

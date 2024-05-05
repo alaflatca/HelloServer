@@ -1,9 +1,8 @@
 package disk
 
 import (
+	"helloServer/agent/measure"
 	"syscall"
-
-	"helloServer/agent/metrics"
 
 	"github.com/pkg/errors"
 )
@@ -18,7 +17,7 @@ func New() *metric {
 	return &metric{defaultPath: "/"}
 }
 
-func (mt *metric) Process(measure *metrics.Measure) error {
+func (mt *metric) Process(ms *measure.Measure) error {
 	fs := syscall.Statfs_t{}
 	err := syscall.Statfs(mt.defaultPath, &fs)
 	if err != nil {
@@ -26,16 +25,16 @@ func (mt *metric) Process(measure *metrics.Measure) error {
 	}
 	diskAll := float64(fs.Blocks * uint64(fs.Bsize))
 	diskAvail := float64(fs.Bavail * uint64(fs.Bsize))
-	measure.Disk.All = diskAll / metrics.GB
-	measure.Disk.Avail = diskAvail / metrics.GB
-	measure.Disk.Used = (diskAll - diskAvail) / metrics.GB
-	measure.Disk.Usage = ((diskAll - diskAvail) / diskAll) * 100
+	ms.Disk.All = diskAll / measure.GB
+	ms.Disk.Avail = diskAvail / measure.GB
+	ms.Disk.Used = (diskAll - diskAvail) / measure.GB
+	ms.Disk.Usage = ((diskAll - diskAvail) / diskAll) * 100
 	// /dev/sda
 
 	return nil
 }
 
-func (mt *metric) Once(measure *metrics.Measure) error {
+func (mt *metric) Once(ms *measure.Measure) error {
 	return nil
 }
 
