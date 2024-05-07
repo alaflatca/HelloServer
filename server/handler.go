@@ -11,12 +11,13 @@ import (
 )
 
 type Request struct {
+	Period int64 `json:"period"`
 }
 
 type Response struct {
 	Success bool        `json:"success"`
 	Reason  string      `json:"reason"`
-	Data    interface{} `json:"data"`
+	Data    interface{} `json:"data,omitempty"`
 	Elapse  string      `json:"elapse"`
 }
 
@@ -59,9 +60,22 @@ func (svr *server) handleMetrics(c fiber.Ctx) error {
 
 func (svr *server) handlePeriod(c fiber.Ctx) error {
 	now := time.Now()
+	req := Request{}
 	rsp := Response{Success: false, Reason: "not specified"}
 
-	if err := measure.Publish("period", time.Second*5); err != nil {
+	if err := c.Bind().JSON(&req); err != nil {
+		rsp.Reason = err.Error()
+		rsp.Elapse = time.Since(now).String()
+		return c.Status(http.StatusBadRequest).JSON(rsp)
+	}
+
+	if req.Period < 1 {
+		rsp.Reason = "invalid period ( period > 0 )"
+		rsp.Elapse = time.Since(now).String()
+		return c.Status(http.StatusBadRequest).JSON(rsp)
+	}
+
+	if err := measure.Publish("period", time.Duration(req.Period)*time.Second); err != nil {
 		rsp.Reason = err.Error()
 		rsp.Elapse = time.Since(now).String()
 		return c.Status(http.StatusInternalServerError).JSON(rsp)
@@ -69,96 +83,6 @@ func (svr *server) handlePeriod(c fiber.Ctx) error {
 
 	rsp.Success = true
 	rsp.Reason = "success"
-	rsp.Elapse = time.Since(now).String()
-	return c.Status(http.StatusOK).JSON(rsp)
-}
-
-func (svr *server) handleMetricsCpu(c fiber.Ctx) error {
-	now := time.Now()
-	rsp := Response{Success: false, Reason: "not specified"}
-
-	data := measure.Get("l")
-	if data == nil {
-		rsp.Reason = "data is empty (error : 'agent' or 'cache')"
-		rsp.Elapse = time.Since(now).String()
-		return c.Status(http.StatusInternalServerError).JSON(rsp)
-	}
-
-	rsp.Success = true
-	rsp.Reason = "success"
-	rsp.Data = data.Cpu
-	rsp.Elapse = time.Since(now).String()
-	return c.Status(http.StatusOK).JSON(rsp)
-}
-
-func (svr *server) handleMetricsMemory(c fiber.Ctx) error {
-	now := time.Now()
-	rsp := Response{Success: false, Reason: "not specified"}
-
-	data := measure.Get("l")
-	if data == nil {
-		rsp.Reason = "data is empty (error : 'agent' or 'cache')"
-		rsp.Elapse = time.Since(now).String()
-		return c.Status(http.StatusInternalServerError).JSON(rsp)
-	}
-
-	rsp.Success = true
-	rsp.Reason = "success"
-	rsp.Data = data.Memory
-	rsp.Elapse = time.Since(now).String()
-	return c.Status(http.StatusOK).JSON(rsp)
-}
-
-func (svr *server) handleMetricsDisk(c fiber.Ctx) error {
-	now := time.Now()
-	rsp := Response{Success: false, Reason: "not specified"}
-
-	data := measure.Get("l")
-	if data == nil {
-		rsp.Reason = "data is empty (error : 'agent' or 'cache')"
-		rsp.Elapse = time.Since(now).String()
-		return c.Status(http.StatusInternalServerError).JSON(rsp)
-	}
-
-	rsp.Success = true
-	rsp.Reason = "success"
-	rsp.Data = data.Disk
-	rsp.Elapse = time.Since(now).String()
-	return c.Status(http.StatusOK).JSON(rsp)
-}
-
-func (svr *server) handleMetricsNetwork(c fiber.Ctx) error {
-	now := time.Now()
-	rsp := Response{Success: false, Reason: "not specified"}
-
-	data := measure.Get("l")
-	if data == nil {
-		rsp.Reason = "data is empty (error : 'agent' or 'cache')"
-		rsp.Elapse = time.Since(now).String()
-		return c.Status(http.StatusInternalServerError).JSON(rsp)
-	}
-
-	rsp.Success = true
-	rsp.Reason = "success"
-	rsp.Data = data.Network
-	rsp.Elapse = time.Since(now).String()
-	return c.Status(http.StatusOK).JSON(rsp)
-}
-
-func (svr *server) handleMetricsSystem(c fiber.Ctx) error {
-	now := time.Now()
-	rsp := Response{Success: false, Reason: "not specified"}
-
-	data := measure.Get("l")
-	if data == nil {
-		rsp.Reason = "data is empty (error : 'agent' or 'cache')"
-		rsp.Elapse = time.Since(now).String()
-		return c.Status(http.StatusInternalServerError).JSON(rsp)
-	}
-
-	rsp.Success = true
-	rsp.Reason = "success"
-	rsp.Data = data.System
 	rsp.Elapse = time.Since(now).String()
 	return c.Status(http.StatusOK).JSON(rsp)
 }
