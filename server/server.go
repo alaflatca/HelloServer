@@ -1,10 +1,10 @@
 package server
 
 import (
-	"flag"
 	"log"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/recover"
 )
 
 type Config struct {
@@ -26,15 +26,10 @@ func (svr *server) Close() {
 }
 
 func (svr *server) Start() {
-	svr.argumentParse()
+	svr.app.Use(recover.New())
 
-	svr.app.Get("/api/metrics", svr.handleMetrics)
+	svr.app.Get("/api/metrics/:metric", svr.handleMetrics)
+	svr.app.Put("/api/period", svr.handlePeriod)
+
 	svr.app.Listen(":9227")
-}
-
-func (svr *server) argumentParse() {
-	port := flag.String("port", "9227", "htpp server port ex) -port=8080")
-	flag.Parse()
-
-	svr.config.Port = *port
 }

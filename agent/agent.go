@@ -9,6 +9,7 @@ import (
 	"helloServer/agent/metrics/system"
 	"log"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -17,7 +18,7 @@ type Agent struct {
 	measure   measure.Measure
 	period    time.Duration
 	breakFlag bool
-	// log 추가
+	debugFlag bool
 }
 
 type Processor interface {
@@ -36,11 +37,21 @@ func (a *Agent) addmetric(process ...Processor) {
 }
 
 func New() *Agent {
-	return &Agent{measure: measure.Measure{}, period: 1}
+	return &Agent{measure: measure.Measure{}, period: 1 * time.Second, debugFlag: true}
 }
 
 func (a *Agent) Start() {
 	a.addmetric(system.New(), cpu.New(), memory.New(), disk.New(), network.New())
+	measure.Subscribe("period", func(data interface{}) {
+		period, ok := data.(time.Duration)
+		if !ok {
+			return
+		}
+		mtx := sync.Mutex{}
+		mtx.Lock()
+		a.period = period
+		mtx.Unlock()
+	})
 	a.Run()
 }
 
@@ -56,24 +67,21 @@ func (a *Agent) Run() {
 		panic(err) // OnceProcess 는 반드시 실행, 에러 발생 시 패닉 후 에러 파악
 	}
 
-	for {
-		if a.breakFlag {
-			break
-		}
-
-		ms = &measure.Measure{}
+	for !a.breakFlag {
 		for i := 0; i < len(a.processor); i++ {
 			if err := a.processor[i].Process(ms); err != nil {
 				log.Printf("[%d] processor error: %s", i, err.Error())
 				// TODO... error 처리 작성
 			}
 		}
-		ms.Show()
+
+		if a.debugFlag {
+			ms.Show()
+		}
+
 		measure.Set("l", ms)
-
-		time.Sleep(a.period * time.Second)
+		time.Sleep(a.period)
 	}
-
 }
 
 func (a *Agent) OnceProcess(measure *measure.Measure) error {
@@ -83,6 +91,5 @@ func (a *Agent) OnceProcess(measure *measure.Measure) error {
 			return err
 		}
 	}
-
 	return nil
 }

@@ -24,7 +24,6 @@ type disk struct {
 	Used  float64 `json:"used"`
 	Avail float64 `json:"avail"`
 	Usage float64 `json:"usage"`
-	Id    string  `json:"id"`
 }
 
 type memory struct {
@@ -40,8 +39,6 @@ type network struct {
 	RxUsage   float64 `json:"rxUsage"`
 	TxUsage   float64 `json:"txUsage"`
 	DailyTime time.Time
-	DailyRx   float64 `json:"dailyRx"`
-	DailyTx   float64 `json:"dailyTx"`
 }
 
 type system struct {
