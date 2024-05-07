@@ -2,7 +2,7 @@ package network
 
 import (
 	"bufio"
-	"helloServer/agent/measure"
+	"helloServer/measure"
 	"helloServer/utils"
 	"log"
 	"net"

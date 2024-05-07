@@ -29,6 +29,10 @@ func (svr *server) Start() {
 	svr.app.Use(recover.New())
 
 	svr.app.Get("/api/metrics/:metric", svr.handleMetrics)
+
+	// svr.app.Get("/api/logs", nil)
+	// svr.app.Get("/api/process", nil)
+
 	svr.app.Put("/api/period", svr.handlePeriod)
 
 	svr.app.Listen(":9227")

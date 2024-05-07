@@ -1,7 +1,7 @@
 package disk
 
 import (
-	"helloServer/agent/measure"
+	"helloServer/measure"
 	"syscall"
 
 	"github.com/pkg/errors"

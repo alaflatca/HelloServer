@@ -2,7 +2,7 @@ package cpu
 
 import (
 	"bufio"
-	"helloServer/agent/measure"
+	"helloServer/measure"
 	"helloServer/utils"
 	"log"
 	"os"

@@ -15,7 +15,7 @@ const Metric_CPU_CSV = "metric_cpu.csv"
 const Metric_NETWORK_CSV = "metric_network.csv"
 
 func InitializeCSV(metricName string) error {
-	metricName = filepath.Join("csv", metricName)
+	metricName = filepath.Join("store", metricName)
 	if _, err := os.Stat(metricName); os.IsNotExist(err) {
 		f, err := os.Create(metricName)
 		if err != nil {

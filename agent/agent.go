@@ -1,12 +1,12 @@
 package agent
 
 import (
-	"helloServer/agent/measure"
 	"helloServer/agent/metrics/cpu"
 	"helloServer/agent/metrics/disk"
 	"helloServer/agent/metrics/memory"
 	"helloServer/agent/metrics/network"
 	"helloServer/agent/metrics/system"
+	"helloServer/measure"
 	"log"
 	"os"
 	"sync"

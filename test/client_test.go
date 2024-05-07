@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"helloServer/agent/measure"
+	"helloServer/measure"
 	"net"
 	"testing"
 )

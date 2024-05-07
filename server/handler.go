@@ -2,7 +2,7 @@ package server
 
 import (
 	"fmt"
-	"helloServer/agent/measure"
+	"helloServer/measure"
 	"net/http"
 	"strings"
 	"time"

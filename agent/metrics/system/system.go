@@ -3,7 +3,7 @@ package system
 import (
 	"bufio"
 	"fmt"
-	"helloServer/agent/measure"
+	"helloServer/measure"
 	"log"
 	"os"
 	"strconv"

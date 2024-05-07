@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// 디렉토리를 agent, server, measure 형태로
 type Measure struct {
 	Cpu     cpu     `json:"cpu"`
 	Disk    disk    `json:"disk"`
