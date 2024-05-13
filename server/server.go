@@ -2,6 +2,7 @@ package server
 
 import (
 	"log"
+	"net/http"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/recover"
@@ -34,6 +35,10 @@ func (svr *server) Start() {
 	// svr.app.Get("/api/process", nil)
 
 	svr.app.Put("/api/period", svr.handlePeriod)
+
+	svr.app.Get("/health", func(c fiber.Ctx) error {
+		return c.SendStatus(http.StatusOK)
+	})
 
 	svr.app.Listen(":9227")
 }

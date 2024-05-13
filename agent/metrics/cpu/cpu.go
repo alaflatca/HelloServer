@@ -2,6 +2,7 @@ package cpu
 
 import (
 	"bufio"
+	"fmt"
 	"helloServer/measure"
 	"helloServer/utils"
 	"log"
@@ -81,5 +82,41 @@ func (mt *metric) Once(measure *measure.Measure) error {
 	if err := utils.InitializeCSV(utils.Metric_CPU_CSV); err != nil {
 		return err
 	}
+
+	modelName, err := GetCpuModelName()
+	if err != nil {
+		return err
+	}
+	measure.Cpu.ModelName = modelName
+
 	return nil
+
+}
+
+func GetCpuModelName() (string, error) {
+	f, err := os.Open("/proc/cpuinfo")
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	modelName := ""
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		fmt.Println("line: ", line)
+
+		split := strings.Split(line, ":")
+		if len(split) < 2 {
+			continue
+		}
+		if strings.TrimSpace(split[0]) != "model name" {
+			continue
+		}
+		modelName = strings.TrimSpace(split[1])
+		fmt.Println("modelName: ", modelName)
+		break
+	}
+
+	return modelName, nil
 }

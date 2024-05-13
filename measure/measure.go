@@ -16,7 +16,8 @@ type Measure struct {
 }
 
 type cpu struct {
-	Usage int64 `json:"usage"`
+	Usage     int64  `json:"usage"`
+	ModelName string `json:"modelName"`
 }
 
 type disk struct {
@@ -58,6 +59,7 @@ func (m *Measure) Show() {
 	fmt.Println("Uptime:\t\t", m.System.Uptime)
 	fmt.Println("Os-Release:\t", m.System.OsRelease)
 	fmt.Printf("Cpu:\t\t%d%%\n", m.Cpu.Usage)
+	fmt.Printf("Cpu-Model:\t%s\n", m.Cpu.ModelName)
 	fmt.Printf("Memory.Total:\t%0.2fGB\n", math.Round(m.Memory.Total/MB))
 	fmt.Printf("Memory.Used:\t%0.2fGB\n", m.Memory.Used/MB) // 정확한 공식 찾아서 수정
 	fmt.Printf("Memory.Usage:\t%0.2f%%\n", m.Memory.Usage)
