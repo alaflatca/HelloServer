@@ -6,10 +6,11 @@ import (
 	"helloServer/agent/metrics/memory"
 	"helloServer/agent/metrics/network"
 	"helloServer/agent/metrics/system"
+	"helloServer/cache"
+	"helloServer/event"
 	"helloServer/measure"
 	"log"
 	"os"
-	"sync"
 	"time"
 )
 
@@ -42,16 +43,15 @@ func New() *Agent {
 
 func (a *Agent) Start() {
 	a.addmetric(system.New(), cpu.New(), memory.New(), disk.New(), network.New())
-	measure.Subscribe("period", func(data interface{}) {
+
+	event.Subscribe("period", func(data interface{}) {
 		period, ok := data.(time.Duration)
 		if !ok {
 			return
 		}
-		mtx := sync.Mutex{}
-		mtx.Lock()
 		a.period = period
-		mtx.Unlock()
 	})
+
 	a.Run()
 }
 
@@ -79,7 +79,7 @@ func (a *Agent) Run() {
 			ms.Show()
 		}
 
-		measure.Set("l", ms)
+		cache.Set("l", ms)
 		time.Sleep(a.period)
 	}
 }

@@ -64,9 +64,12 @@ func (mt *metric) Process(ms *measure.Measure) error {
 			continue
 		}
 
-		if fields[0] == "lo:" {
+		if fields[0] != "eth0:" {
 			continue
 		}
+		// if fields[0] == "lo:" {
+		// continue
+		// }
 
 		ms.Network.Iface = fields[IFACE]
 		rxBytes, _ := strconv.ParseFloat(fields[RX_INDEX], 64)

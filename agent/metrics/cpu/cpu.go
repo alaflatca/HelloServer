@@ -2,7 +2,6 @@ package cpu
 
 import (
 	"bufio"
-	"fmt"
 	"helloServer/measure"
 	"helloServer/utils"
 	"log"
@@ -104,7 +103,6 @@ func GetCpuModelName() (string, error) {
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Text()
-		fmt.Println("line: ", line)
 
 		split := strings.Split(line, ":")
 		if len(split) < 2 {
@@ -114,7 +112,6 @@ func GetCpuModelName() (string, error) {
 			continue
 		}
 		modelName = strings.TrimSpace(split[1])
-		fmt.Println("modelName: ", modelName)
 		break
 	}
 

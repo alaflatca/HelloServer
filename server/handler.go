@@ -2,7 +2,9 @@ package server
 
 import (
 	"fmt"
-	"helloServer/measure"
+	"helloServer/agent/metrics/system"
+	"helloServer/cache"
+	"helloServer/event"
 	"net/http"
 	"strings"
 	"time"
@@ -25,7 +27,7 @@ func (svr *server) handleMetrics(c fiber.Ctx) error {
 	now := time.Now()
 	rsp := Response{Success: false, Reason: "not specified"}
 
-	data := measure.Get("l")
+	data := cache.Get("l")
 	if data == nil {
 		rsp.Reason = "data is empty (error : 'agent' or 'cache')"
 		rsp.Elapse = time.Since(now).String()
@@ -58,6 +60,24 @@ func (svr *server) handleMetrics(c fiber.Ctx) error {
 	return c.Status(http.StatusOK).JSON(rsp)
 }
 
+func (svr *server) handleProcessList(c fiber.Ctx) error {
+	now := time.Now()
+	rsp := Response{Success: false, Reason: "not specified"}
+
+	processList, err := system.GetProcessList()
+	if err != nil {
+		rsp.Reason = err.Error()
+		rsp.Elapse = time.Since(now).String()
+		return c.Status(http.StatusInternalServerError).JSON(rsp)
+	}
+
+	rsp.Success = true
+	rsp.Data = processList
+	rsp.Reason = "success"
+	rsp.Elapse = time.Since(now).String()
+	return c.Status(http.StatusOK).JSON(rsp)
+}
+
 func (svr *server) handlePeriod(c fiber.Ctx) error {
 	now := time.Now()
 	req := Request{}
@@ -75,7 +95,7 @@ func (svr *server) handlePeriod(c fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(rsp)
 	}
 
-	if err := measure.Publish("period", time.Duration(req.Period)*time.Second); err != nil {
+	if err := event.Publish("period", time.Duration(req.Period)*time.Second); err != nil {
 		rsp.Reason = err.Error()
 		rsp.Elapse = time.Since(now).String()
 		return c.Status(http.StatusInternalServerError).JSON(rsp)
