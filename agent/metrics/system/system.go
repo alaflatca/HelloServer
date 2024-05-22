@@ -126,6 +126,7 @@ func LookupUID(uid string) string {
 		split := strings.Split(line, ":")
 		userName := split[0]
 		uid := split[2]
+		// map 추가
 	}
 }
 
