@@ -1,5 +1,5 @@
 # Hello, Server!
-**Simple Server Monitoring Agent + Web server**
+**Simple Server Monitoring Agent**
 
 
 ## structure
