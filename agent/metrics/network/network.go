@@ -85,6 +85,10 @@ func (mt *metric) Process(ms *measure.Measure) error {
 }
 
 func (mt *metric) selectDevice(stats []deviceStat) (deviceStat, bool) {
+	return mt.selectDeviceWithActive(stats, activeInterfaceNames())
+}
+
+func (mt *metric) selectDeviceWithActive(stats []deviceStat, active map[string]struct{}) (deviceStat, bool) {
 	if mt.iface != "" {
 		for _, stat := range stats {
 			if stat.iface == mt.iface {
@@ -93,7 +97,6 @@ func (mt *metric) selectDevice(stats []deviceStat) (deviceStat, bool) {
 		}
 	}
 
-	active := activeInterfaceNames()
 	for _, stat := range stats {
 		if stat.iface == "lo" {
 			continue

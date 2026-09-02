@@ -1,9 +1,18 @@
 package memory
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
+
+var errReadMemInfo = errors.New("read meminfo")
+
+type failingReader struct{}
+
+func (failingReader) Read(_ []byte) (int, error) {
+	return 0, errReadMemInfo
+}
 
 func TestParseMemInfo(t *testing.T) {
 	input := `MemTotal:        8089672 kB
@@ -37,5 +46,22 @@ Cached:          1174896 kB
 
 	if _, _, _, err := parseMemInfo(strings.NewReader(input)); err == nil {
 		t.Fatal("expected missing field error")
+	}
+}
+
+func TestParseMemInfoInvalidNumber(t *testing.T) {
+	input := `MemTotal:        invalid kB
+MemAvailable:    6354024 kB
+Cached:          1174896 kB
+`
+
+	if _, _, _, err := parseMemInfo(strings.NewReader(input)); err == nil {
+		t.Fatal("expected parse error")
+	}
+}
+
+func TestParseMemInfoReaderError(t *testing.T) {
+	if _, _, _, err := parseMemInfo(failingReader{}); !errors.Is(err, errReadMemInfo) {
+		t.Fatalf("err = %v, want %v", err, errReadMemInfo)
 	}
 }
