@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"helloServer/measure"
-	"log"
+	"io"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -13,17 +13,6 @@ import (
 
 	"github.com/pkg/errors"
 )
-
-func init() {
-	if _, err := os.Stat("/etc/os-release"); os.IsNotExist(err) {
-		log.Println("'/etc/os-release' is not exist")
-		os.Exit(1)
-	}
-	if _, err := os.Stat("/proc/uptime"); os.IsNotExist(err) {
-		log.Println("'/proc/uptime' is not exist")
-		os.Exit(1)
-	}
-}
 
 type metric struct {
 	OS     string
@@ -57,7 +46,11 @@ func GetUptime() (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "Failed to read file '/proc/uptime'")
 	}
-	fields := strings.Fields(string(uptimeBytes))
+	return parseUptime(string(uptimeBytes))
+}
+
+func parseUptime(raw string) (string, error) {
+	fields := strings.Fields(raw)
 	if len(fields) < 2 {
 		return "", errors.New("/proc/uptime read value abnormal")
 	}
@@ -90,11 +83,15 @@ func (mt *metric) GetOsRelease() (string, error) {
 	}
 	defer f.Close()
 
+	return parseOSRelease(f)
+}
+
+func parseOSRelease(r io.Reader) (string, error) {
 	var osRelease string
-	scanner := bufio.NewScanner(f)
+	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line := scanner.Text()
-		split := strings.Split(line, "=")
+		split := strings.SplitN(line, "=", 2)
 		if len(split) < 2 {
 			continue
 		}
@@ -109,25 +106,19 @@ func (mt *metric) GetOsRelease() (string, error) {
 	if scanner.Err() != nil {
 		return "", errors.Wrap(scanner.Err(), "Failed to os-release scanner")
 	}
+	if osRelease == "" {
+		return "", errors.New("PRETTY_NAME not found in /etc/os-release")
+	}
 
 	return osRelease, nil
 }
 
 func LookupUID(uid string) string {
-	f, err := os.Open("/etc/passwd")
+	usr, err := user.LookupId(uid)
 	if err != nil {
-		return ""
+		return uid
 	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		split := strings.Split(line, ":")
-		userName := split[0]
-		uid := split[2]
-		// map 추가
-	}
+	return usr.Username
 }
 
 func (mt *metric) Once(measure *measure.Measure) error {
@@ -151,15 +142,33 @@ func GetProcessList() ([]*ProcessInfo, error) {
 
 	processInfoList := make([]*ProcessInfo, 0)
 	for _, dir := range dirEntry {
-		if dir.IsDir() {
-			name := dir.Name()
-			if '0' < name[0] && name[0] <= '9' {
-				info := &ProcessInfo{}
-				procStatus(info, filepath.Join("/proc", name, "status"))
-				procCmdline(info, filepath.Join("/proc", name, "cmdline"))
-				processInfoList = append(processInfoList, info)
+		if !dir.IsDir() {
+			continue
+		}
+
+		name := dir.Name()
+		if _, err := strconv.Atoi(name); err != nil {
+			continue
+		}
+
+		info := &ProcessInfo{}
+		if err := procStatus(info, filepath.Join("/proc", name, "status")); err != nil {
+			if os.IsNotExist(err) || os.IsPermission(err) {
+				continue
+			}
+			return nil, errors.Wrapf(err, "read process status for pid %s", name)
+		}
+		if err := procCmdline(info, filepath.Join("/proc", name, "cmdline")); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			if os.IsPermission(err) {
+				info.Cmd = ""
+			} else {
+				return nil, errors.Wrapf(err, "read process cmdline for pid %s", name)
 			}
 		}
+		processInfoList = append(processInfoList, info)
 	}
 
 	return processInfoList, nil
@@ -170,16 +179,16 @@ func procStatus(info *ProcessInfo, path string) error {
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
 
-	for i := 0; i < 9; i++ {
-		if !scanner.Scan() {
-			return scanner.Err()
-		}
-
+	for scanner.Scan() {
 		line := scanner.Text()
 		split := strings.Fields(line)
+		if len(split) < 2 {
+			continue
+		}
 		switch split[0] {
 		case "Pid:":
 			info.Pid = strings.TrimSpace(split[1])
@@ -189,16 +198,16 @@ func procStatus(info *ProcessInfo, path string) error {
 			uid := strings.TrimSpace(split[1])
 			user, err := user.LookupId(uid)
 			if err != nil {
-				return err
+				info.Uid = uid
+				continue
 			}
-			fmt.Printf("uid: %s, name: %s\n", uid, user.Name)
-			info.Uid = user.Name
+			info.Uid = user.Username
 		default:
 			continue
 		}
 	}
 
-	return nil
+	return scanner.Err()
 }
 
 func procCmdline(info *ProcessInfo, path string) error {
@@ -207,6 +216,6 @@ func procCmdline(info *ProcessInfo, path string) error {
 		return err
 	}
 
-	info.Cmd = string(cmd)
+	info.Cmd = strings.TrimSpace(strings.ReplaceAll(string(cmd), "\x00", " "))
 	return nil
 }

@@ -1,204 +1,127 @@
 # Hello, Server!
-**Simple Server Monitoring Agent**
 
+Go 기반 Linux 서버 모니터링 에이전트입니다. Agent가 주기적으로 CPU, memory, disk, network, system metric을 수집하고, Fiber 기반 HTTP server가 최신 snapshot을 REST API로 제공합니다.
 
-## structure
+## 특징
 
-### Agent
- : Collecting data from different types periodically ( cpu, memory, disk, network, system )
- 
-### Server
- : Web servers that provide data collected by agents
+- Linux `/proc`와 `statfs` 기반 metric 수집
+- 기본 수집 주기 1초
+- `/api/period`로 수집 주기 변경
+- `/proc/stat`의 `total/idle` delta 기반 CPU 사용률 계산
+- `eth0` 고정 없이 loopback이 아닌 활성 네트워크 인터페이스 자동 선택
+- mutex로 보호된 metric snapshot cache
+- `context.Context`와 `time.Ticker` 기반 agent lifecycle
 
-<br/>
+## 실행
+
+```bash
+go run .
+```
+
+기본 포트는 `9227`입니다.
+
+```bash
+curl http://localhost:9227/health
+curl http://localhost:9227/api/metrics/all
+```
 
 ## REST API
 
-|Method | URL | 의미 |
+| Method | URL | 설명 |
 |:--:|:---|:---|
-|GET| `/api/metrics/all` | All Info |
-|GET| `/api/metrics/cpu` | CPU Info |
-|GET| `/api/metrics/disk` | Disk Info |
-|GET| `/api/metrics/memory` | Memory Info |
-|GET| `/api/metrics/network` | Network Info |
-|GET| `/api/metrics/system` | System Info |
-|PUT| `/api/period` |Agent period modify |
+| GET | `/health` | health check |
+| GET | `/api/metrics/all` | 전체 metric snapshot |
+| GET | `/api/metrics/cpu` | CPU metric |
+| GET | `/api/metrics/disk` | Disk metric |
+| GET | `/api/metrics/memory` | Memory metric |
+| GET | `/api/metrics/network` | Network metric |
+| GET | `/api/metrics/system` | System metric |
+| GET | `/api/process` | `/proc` 기반 process 목록 |
+| PUT | `/api/period` | agent 수집 주기 변경 |
 
-<br/>
-<br/>
+## Response 예시
 
+`GET /api/metrics/all`
 
-`/api/metrics/all`
-<details>
- <summary> response </summary>
- 
 ```json
 {
-    "success": true,
-    "reason": "success",
-    "data": {
-        "cpu": {
-            "usage": 4
-        },
-        "disk": {
-            "path": "",
-            "all": 250.92389297485352,
-            "used": 58.37794494628906,
-            "avail": 192.54594802856445,
-            "usage": 23.265199760048137
-        },
-        "memory": {
-            "total": 8089676,
-            "used": 1416280,
-            "usage": 17.507252453621135,
-            "cached": 0.8846664428710938
-        },
-        "network": {
-            "iface": "eth0:",
-            "ipAddress": "172.30.148.16",
-            "rxUsage": 0,
-            "txUsage": 0,
-            "DailyTime": "2024-05-07T00:00:00Z"
-        },
-        "system": {
-            "osRelease": "Ubuntu 20.04.6 LTS",
-            "uptime": "0 days 2 hour"
-        }
+  "success": true,
+  "reason": "success",
+  "data": {
+    "cpu": {
+      "usage": 4,
+      "modelName": "Intel(R) Core(TM) CPU"
     },
-    "elapse": "1.6µs"
+    "disk": {
+      "path": "/",
+      "all": 250.92,
+      "used": 58.37,
+      "avail": 192.54,
+      "usage": 23.26
+    },
+    "memory": {
+      "total": 8089676,
+      "used": 1416280,
+      "usage": 17.5,
+      "cached": 0.88
+    },
+    "network": {
+      "iface": "ens5",
+      "ipAddress": "192.168.0.3",
+      "rxUsage": 12.5,
+      "txUsage": 3.1,
+      "DailyTime": "2026-09-02T00:00:00Z"
+    },
+    "system": {
+      "osRelease": "Ubuntu 20.04.6 LTS",
+      "uptime": "0 days 2 hour"
+    }
+  },
+  "elapse": "1.6µs"
 }
 ```
 
-</details>
-<br/>
+`PUT /api/period`
 
+```bash
+curl -X PUT http://localhost:9227/api/period \
+  -H 'Content-Type: application/json' \
+  -d '{"period":3}'
+```
 
-`/api/metrics/cpu`
-<details>
- <summary> response </summary>
- 
 ```json
 {
-    "success": true,
-    "reason": "success",
-    "data": {
-        "usage": 1
-    },
-    "elapse": "1.2µs"
-}
-```
-</details>
-<br/>
-
-
-`/api/metrics/disk`
-<details>
- <summary> response </summary>
- 
- ```json
-{
-    "success": true,
-    "reason": "success",
-    "data": {
-        "path": "",
-        "all": 250.92389297485352,
-        "used": 58.37795639038086,
-        "avail": 192.54593658447266,
-        "usage": 23.265204320830158
-    },
-    "elapse": "4.2µs"
+  "success": true,
+  "reason": "success",
+  "elapse": "38.6µs"
 }
 ```
 
-</details>
-<br/>
+`period` 값은 초 단위이며 1 이상이어야 합니다.
 
+## 저장 파일
 
-`/api/metrics/memory`
-<details>
- <summary> response </summary>
- 
- ```json
-{
-    "success": true,
-    "reason": "success",
-    "data": {
-        "total": 8089676,
-        "used": 1420448,
-        "usage": 17.55877491261702,
-        "cached": 0.8846778869628906
-    },
-    "elapse": "1.9µs"
-}
- ```
+CPU/network CSV는 `store/` 디렉터리 아래에 생성됩니다.
 
-</details>
-<br/>
+- `store/metric_cpu.csv`
+- `store/metric_network.csv`
 
+## 테스트
 
-`/api/metrics/network`
-<details>
-<summary> response </summary>
- 
- ```json
-{
-    "success": true,
-    "reason": "success",
-    "data": {
-        "iface": "eth0:",
-        "ipAddress": "192.168.0.3",
-        "rxUsage": 0,
-        "txUsage": 0,
-        "DailyTime": "2024-05-07T00:00:00Z"
-    },
-    "elapse": "2.6µs"
-}
+```bash
+go test ./...
+go test -race ./...
+go vet ./...
 ```
 
-</details>
-<br/>
+홈 디렉터리의 Go build cache에 쓸 수 없는 환경에서는 다음처럼 cache 위치를 지정할 수 있습니다.
 
-
-`/api/metrics/system`
-<details>
- <summary> response </summary>
- 
-```json
-{
-    "success": true,
-    "reason": "success",
-    "data": {
-        "osRelease": "Ubuntu 20.04.6 LTS",
-        "uptime": "0 days 2 hour"
-    },
-    "elapse": "2.3µs"
-}
+```bash
+GOCACHE=/tmp/helloserver-gocache go test ./...
 ```
 
-</details>
-<br/>
+`test/client_test.go`는 오래된 TCP client 테스트라 기본적으로 skip됩니다. 필요한 경우 `HELLOSERVER_TEST_ADDR` 환경변수에 테스트 대상 주소를 넣어 실행할 수 있습니다.
 
-`/api/period`
-<details>
- <summary> request </summary>
- 
-```json
-{
-  "period": 3    // 3 second
-}
-```
-</details>
+## 지원 환경
 
-<details>
- <summary> response </summary>
- 
-```json
-{
-    "success": true,
-    "reason": "success",
-    "elapse": "38.6µs"
-}
-```
-
-</details>
-<br/>
+Linux의 `/proc` 파일 시스템을 전제로 합니다. macOS나 Windows native 환경에서는 metric 수집이 정상 동작하지 않을 수 있습니다.

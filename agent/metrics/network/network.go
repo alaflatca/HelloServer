@@ -2,9 +2,10 @@ package network
 
 import (
 	"bufio"
+	"fmt"
 	"helloServer/measure"
 	"helloServer/utils"
-	"log"
+	"io"
 	"net"
 	"os"
 	"strconv"
@@ -13,30 +14,21 @@ import (
 	"github.com/pkg/errors"
 )
 
-func init() {
-	if _, err := os.Stat("/proc/net/dev"); os.IsNotExist(err) {
-		log.Println("'/proc/net/dev' is not exist")
-		os.Exit(1)
-	}
-
-	if _, err := os.Stat("daily_network.csv"); os.IsNotExist(err) {
-		f, err := os.Create("daily_network.csv")
-		if err != nil {
-			os.Exit(1)
-		}
-		f.Close()
-	}
-}
-
 const (
-	IFACE    = 0
 	RX_INDEX = 1
 	TX_INDEX = 9
 )
 
 type metric struct {
-	previousRxBytes float64
-	previousTxBytes float64
+	iface           string
+	previousRxBytes uint64
+	previousTxBytes uint64
+}
+
+type deviceStat struct {
+	iface   string
+	rxBytes uint64
+	txBytes uint64
 }
 
 func New() *metric {
@@ -44,71 +36,187 @@ func New() *metric {
 }
 
 func (mt *metric) Process(ms *measure.Measure) error {
-	f, err := os.Open("/proc/net/dev")
+	stats, err := readNetDev("/proc/net/dev")
 	if err != nil {
-		return errors.Wrap(err, "Failed to open '/proc/net/dev'")
+		return err
 	}
-	defer f.Close()
 
-	// Inter-|   Receive                                                    |  Transmit
-	//  face |bytes    packets errs drop fifo frame compressed multicast|   bytes    packets errs drop fifo colls carrier compressed
-	//  lo:    441220207  267382    0    0    0     0          0         0  441220207  267382    0    0    0     0       0          0
-	//  eth0: 2652673230 1791793    0    0    0     0          0      1543  30048187  411110    0    0    0     0       0          0
-	scanner := bufio.NewScanner(f)
-	scanner.Scan()
-	scanner.Scan()
-	for scanner.Scan() {
-		line := scanner.Text()
-		fields := strings.Fields(line)
-		if len(fields) < 17 {
-			continue
-		}
-
-		if fields[0] != "eth0:" {
-			continue
-		}
-		// if fields[0] == "lo:" {
-		// continue
-		// }
-
-		ms.Network.Iface = fields[IFACE]
-		rxBytes, _ := strconv.ParseFloat(fields[RX_INDEX], 64)
-		txBytes, _ := strconv.ParseFloat(fields[TX_INDEX], 64)
-
-		if mt.previousRxBytes == 0 && mt.previousTxBytes == 0 {
-			mt.previousRxBytes = rxBytes
-			mt.previousTxBytes = txBytes
-			return nil
-		}
-
-		ms.Network.RxUsage = float64(rxBytes-mt.previousRxBytes) / measure.KB
-		ms.Network.TxUsage = float64(txBytes-mt.previousTxBytes) / measure.KB
-
-		mt.previousRxBytes = rxBytes
-		mt.previousTxBytes = txBytes
-
-		// daily record
-		daily := utils.NowDaily()
-		if daily.After(ms.Network.DailyTime) { // 2024-04-12 > 2024-04-11
-			ms.Network.DailyTime = daily
-			// utils.dailyWriteCSV
-			// csv format
-			// 2024-04-11,{first_byte},{last_byte - first_byte}
-		}
-
+	stat, ok := mt.selectDevice(stats)
+	if !ok {
+		return errors.New("network interface not found")
 	}
+
+	ms.Network.Iface = stat.iface
+	ms.Network.IPaddress = getIPv4ForInterface(stat.iface)
+
+	if mt.iface != stat.iface {
+		mt.iface = stat.iface
+		mt.previousRxBytes = stat.rxBytes
+		mt.previousTxBytes = stat.txBytes
+		ms.Network.RxUsage = 0
+		ms.Network.TxUsage = 0
+		return nil
+	}
+
+	if stat.rxBytes < mt.previousRxBytes || stat.txBytes < mt.previousTxBytes {
+		mt.previousRxBytes = stat.rxBytes
+		mt.previousTxBytes = stat.txBytes
+		ms.Network.RxUsage = 0
+		ms.Network.TxUsage = 0
+		return nil
+	}
+
+	ms.Network.RxUsage = float64(stat.rxBytes-mt.previousRxBytes) / measure.KB
+	ms.Network.TxUsage = float64(stat.txBytes-mt.previousTxBytes) / measure.KB
+
+	mt.previousRxBytes = stat.rxBytes
+	mt.previousTxBytes = stat.txBytes
+
+	// daily record
+	daily := utils.NowDaily()
+	if daily.After(ms.Network.DailyTime) { // 2024-04-12 > 2024-04-11
+		ms.Network.DailyTime = daily
+		// utils.dailyWriteCSV
+		// csv format
+		// 2024-04-11,{first_byte},{last_byte - first_byte}
+	}
+
 	return nil
 }
 
-func GetLocalIP() string {
-	conn, err := net.Dial("udp", "8.8.8.8:80")
-	if err != nil {
-		log.Fatal(err)
+func (mt *metric) selectDevice(stats []deviceStat) (deviceStat, bool) {
+	if mt.iface != "" {
+		for _, stat := range stats {
+			if stat.iface == mt.iface {
+				return stat, true
+			}
+		}
 	}
-	defer conn.Close()
 
-	localAddr := conn.LocalAddr().(*net.UDPAddr)
-	return localAddr.IP.String()
+	active := activeInterfaceNames()
+	for _, stat := range stats {
+		if stat.iface == "lo" {
+			continue
+		}
+		if _, ok := active[stat.iface]; ok {
+			return stat, true
+		}
+	}
+
+	for _, stat := range stats {
+		if stat.iface != "lo" {
+			return stat, true
+		}
+	}
+	return deviceStat{}, false
+}
+
+func readNetDev(path string) ([]deviceStat, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("open %q", path))
+	}
+	defer f.Close()
+
+	stats, err := parseNetDev(f)
+	if err != nil {
+		return nil, err
+	}
+	return stats, nil
+}
+
+func parseNetDev(r io.Reader) ([]deviceStat, error) {
+	scanner := bufio.NewScanner(r)
+	var stats []deviceStat
+	for scanner.Scan() {
+		stat, ok, err := parseNetDevLine(scanner.Text())
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			stats = append(stats, stat)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, errors.Wrap(err, "scan /proc/net/dev")
+	}
+	if len(stats) == 0 {
+		return nil, errors.New("network statistics not found")
+	}
+	return stats, nil
+}
+
+func parseNetDevLine(line string) (deviceStat, bool, error) {
+	parts := strings.SplitN(line, ":", 2)
+	if len(parts) != 2 {
+		return deviceStat{}, false, nil
+	}
+
+	iface := strings.TrimSpace(parts[0])
+	fields := strings.Fields(parts[1])
+	if len(fields) < 16 {
+		return deviceStat{}, false, fmt.Errorf("invalid network stat line: %q", line)
+	}
+
+	rxBytes, err := strconv.ParseUint(fields[RX_INDEX-1], 10, 64)
+	if err != nil {
+		return deviceStat{}, false, errors.Wrapf(err, "parse rx bytes for %s", iface)
+	}
+	txBytes, err := strconv.ParseUint(fields[TX_INDEX-1], 10, 64)
+	if err != nil {
+		return deviceStat{}, false, errors.Wrapf(err, "parse tx bytes for %s", iface)
+	}
+
+	return deviceStat{iface: iface, rxBytes: rxBytes, txBytes: txBytes}, true, nil
+}
+
+func activeInterfaceNames() map[string]struct{} {
+	active := make(map[string]struct{})
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return active
+	}
+
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		active[iface.Name] = struct{}{}
+	}
+	return active
+}
+
+func getIPv4ForInterface(name string) string {
+	iface, err := net.InterfaceByName(name)
+	if err != nil {
+		return ""
+	}
+
+	addresses, err := iface.Addrs()
+	if err != nil {
+		return ""
+	}
+	for _, addr := range addresses {
+		ipnet, ok := addr.(*net.IPNet)
+		if !ok || ipnet.IP.IsLoopback() {
+			continue
+		}
+		if ip := ipnet.IP.To4(); ip != nil {
+			return ip.String()
+		}
+	}
+	return ""
+}
+
+func GetLocalIP() (string, error) {
+	ips, err := GetLocalIPs()
+	if err != nil {
+		return "", err
+	}
+	if len(ips) == 0 {
+		return "", nil
+	}
+	return ips[0].String(), nil
 }
 
 func GetLocalIPs() ([]net.IP, error) {
@@ -129,7 +237,11 @@ func GetLocalIPs() ([]net.IP, error) {
 }
 
 func (mt *metric) Once(ms *measure.Measure) error {
-	ms.Network.IPaddress = GetLocalIP()
+	ip, err := GetLocalIP()
+	if err != nil {
+		return err
+	}
+	ms.Network.IPaddress = ip
 	ms.Network.DailyTime = utils.NowDaily()
 	// 최초 실행 시간 저장
 

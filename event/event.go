@@ -29,13 +29,13 @@ func Subscribe(key string, e eventHandler) {
 
 func Publish(key string, data interface{}) error {
 	evtMutex.Lock()
-	defer evtMutex.Unlock()
 	e, ok := evtBus.events[key]
+	evtMutex.Unlock()
 	if !ok {
 		return fmt.Errorf("invalid event (key: '%s')", key)
 	}
 
-	go e(data)
+	e(data)
 
 	return nil
 }

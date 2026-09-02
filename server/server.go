@@ -21,12 +21,12 @@ func New() *server {
 	return &server{app: fiber.New()}
 }
 
-func (svr *server) Close() {
+func (svr *server) Close() error {
 	log.Println("Fiber Shutdown")
-	svr.app.Shutdown()
+	return svr.app.Shutdown()
 }
 
-func (svr *server) Start() {
+func (svr *server) Start() error {
 	svr.app.Use(recover.New())
 
 	svr.app.Get("/api/metrics/:metric", svr.handleMetrics)
@@ -37,5 +37,5 @@ func (svr *server) Start() {
 		return c.SendStatus(http.StatusOK)
 	})
 
-	svr.app.Listen(":9227")
+	return svr.app.Listen(":9227")
 }

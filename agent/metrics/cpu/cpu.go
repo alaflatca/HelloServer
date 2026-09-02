@@ -2,9 +2,9 @@ package cpu
 
 import (
 	"bufio"
+	"fmt"
 	"helloServer/measure"
 	"helloServer/utils"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -13,15 +13,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-func init() {
-	if _, err := os.Stat("/proc/stat"); os.IsNotExist(err) {
-		log.Println("'/proc/stat' is not exist")
-		os.Exit(1)
-	}
-}
-
 type metric struct {
-	previousCPU  int64
+	previousIdle uint64
+	previousCPU  uint64
 	criteriaTime time.Time
 }
 
@@ -32,46 +26,35 @@ func New() *metric {
 }
 
 func (mt *metric) Process(measure *measure.Measure) error {
-	f, err := os.Open("/proc/stat")
+	total, idle, err := readCPUTimes("/proc/stat")
 	if err != nil {
-		return errors.Wrap(err, "'/proc/stat' open error")
+		return err
 	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	scanner.Scan()
-
-	if scanner.Err() != nil {
-		return errors.Wrap(scanner.Err(), "scanner scan error")
-	}
-
-	split := strings.Split(scanner.Text(), " ")
-	text := split[2]
-
-	currentCPU, err := strconv.ParseInt(text, 10, 64)
-	if err != nil {
-		return errors.Wrap(err, "strconv parseInt error")
-	}
-
-	// cpu 사용률은 현재 사용률 - 이전 사용률 = 사용률
-	// 현재 2초 간격으로 데이터를 가져오고 있음
-	// 이전 CPU 값을 저장하고 2초 후에는 현재 cpu 값이 많이 늘어남 그래서 위 공식대로 계산 시 100을 넘게됨
 
 	if mt.previousCPU == 0 {
-		mt.previousCPU = currentCPU
+		mt.previousCPU = total
+		mt.previousIdle = idle
 		return nil
 	}
-	cpuUsage := currentCPU - mt.previousCPU
 
+	cpuUsage, ok := calculateUsage(mt.previousCPU, mt.previousIdle, total, idle)
+	if !ok {
+		mt.previousCPU = total
+		mt.previousIdle = idle
+		return nil
+	}
 	measure.Cpu.Usage = cpuUsage
-	mt.previousCPU = currentCPU
+	mt.previousCPU = total
+	mt.previousIdle = idle
 
 	// cpu usage csv
 	if time.Since(mt.criteriaTime) > (10 * time.Second) {
 		mt.criteriaTime = time.Now()
 		// record
 		record := []string{utils.NowString(), strconv.Itoa(int(cpuUsage))}
-		utils.WriteCSV(utils.Metric_CPU_CSV, record)
+		if err := utils.WriteCSV(utils.Metric_CPU_CSV, record); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -92,6 +75,75 @@ func (mt *metric) Once(measure *measure.Measure) error {
 
 }
 
+func readCPUTimes(path string) (uint64, uint64, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, 0, errors.Wrap(err, fmt.Sprintf("%q open error", path))
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	if !scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return 0, 0, errors.Wrap(err, "scan cpu stat")
+		}
+		return 0, 0, errors.New("cpu stat is empty")
+	}
+	total, idle, err := parseCPUStatLine(scanner.Text())
+	if err != nil {
+		return 0, 0, err
+	}
+	if err := scanner.Err(); err != nil {
+		return 0, 0, errors.Wrap(err, "scan cpu stat")
+	}
+	return total, idle, nil
+}
+
+func parseCPUStatLine(line string) (uint64, uint64, error) {
+	fields := strings.Fields(line)
+	if len(fields) < 5 {
+		return 0, 0, fmt.Errorf("invalid cpu stat line: %q", line)
+	}
+	if fields[0] != "cpu" {
+		return 0, 0, fmt.Errorf("invalid cpu stat prefix: %q", fields[0])
+	}
+
+	values := make([]uint64, 0, len(fields)-1)
+	for _, field := range fields[1:] {
+		value, err := strconv.ParseUint(field, 10, 64)
+		if err != nil {
+			return 0, 0, errors.Wrapf(err, "parse cpu stat field %q", field)
+		}
+		values = append(values, value)
+	}
+
+	var total uint64
+	for _, value := range values {
+		total += value
+	}
+
+	idle := values[3]
+	if len(values) > 4 {
+		idle += values[4]
+	}
+	return total, idle, nil
+}
+
+func calculateUsage(previousTotal, previousIdle, currentTotal, currentIdle uint64) (int64, bool) {
+	if currentTotal <= previousTotal || currentIdle < previousIdle {
+		return 0, false
+	}
+
+	totalDelta := currentTotal - previousTotal
+	idleDelta := currentIdle - previousIdle
+	if totalDelta == 0 || idleDelta > totalDelta {
+		return 0, false
+	}
+
+	usage := float64(totalDelta-idleDelta) * 100 / float64(totalDelta)
+	return int64(usage + 0.5), true
+}
+
 func GetCpuModelName() (string, error) {
 	f, err := os.Open("/proc/cpuinfo")
 	if err != nil {
@@ -104,7 +156,7 @@ func GetCpuModelName() (string, error) {
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		split := strings.Split(line, ":")
+		split := strings.SplitN(line, ":", 2)
 		if len(split) < 2 {
 			continue
 		}
@@ -113,6 +165,13 @@ func GetCpuModelName() (string, error) {
 		}
 		modelName = strings.TrimSpace(split[1])
 		break
+	}
+
+	if scanner.Err() != nil {
+		return "", errors.Wrap(scanner.Err(), "scan /proc/cpuinfo")
+	}
+	if modelName == "" {
+		return "", errors.New("cpu model name not found")
 	}
 
 	return modelName, nil

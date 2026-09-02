@@ -2,21 +2,15 @@ package memory
 
 import (
 	"bufio"
+	"fmt"
 	"helloServer/measure"
-	"log"
+	"io"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
 )
-
-func init() {
-	if _, err := os.Stat("/proc/meminfo"); os.IsNotExist(err) {
-		log.Println("'/proc/meminfo' is not exist")
-		os.Exit(1)
-	}
-}
 
 type metric struct{}
 
@@ -29,61 +23,15 @@ func New() *metric {
 // free   Unused memory (MemFree and SwapFree in /proc/meminfo)
 // avail  = free - reserved filesystem blocks(for root)
 func (mt *metric) Process(ms *measure.Measure) error {
-	var err error
 	f, err := os.Open("/proc/meminfo")
 	if err != nil {
 		return errors.Wrap(err, "/proc/meminfo open error")
 	}
 	defer f.Close()
 
-	scanner := bufio.NewScanner(f)
-
-	/*
-		MemTotal:        8089672 kB
-		MemFree:         4679572 kB
-		MemAvailable:    6354024 kB
-		Buffers:          586580 kB
-		Cached:          1174896 kB
-	*/
-
-	var memoryTotal, memoryAvailable, memoryCached float64
-	for i := 0; i < 5; i++ {
-		scanner.Scan()
-		line := scanner.Text()
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-
-		switch fields[0] {
-		case "MemTotal:":
-			value := fields[len(fields)-2]
-
-			memoryTotal, err = strconv.ParseFloat(value, 64)
-			if err != nil {
-				return errors.Wrap(err, "Failed to convert (string -> int)")
-			}
-		case "MemAvailable:":
-			value := fields[len(fields)-2]
-
-			memoryAvailable, err = strconv.ParseFloat(value, 64)
-			if err != nil {
-				return errors.Wrap(err, "Failed to convert (string -> int)")
-			}
-		case "Cached:":
-			value := fields[len(fields)-2]
-
-			memoryCached, err = strconv.ParseFloat(value, 64)
-			if err != nil {
-				return errors.Wrap(err, "Failed to convert (string -> int)")
-			}
-		default:
-			continue
-		}
-	}
-
-	if scanner.Err() != nil {
-		return errors.Wrap(scanner.Err(), "Failed to scan /proc/meminfo")
+	memoryTotal, memoryAvailable, memoryCached, err := parseMemInfo(f)
+	if err != nil {
+		return err
 	}
 
 	// KB 단위
@@ -93,6 +41,64 @@ func (mt *metric) Process(ms *measure.Measure) error {
 	ms.Memory.Cached = memoryCached / measure.MB
 
 	return nil
+}
+
+func parseMemInfo(r io.Reader) (float64, float64, float64, error) {
+	scanner := bufio.NewScanner(r)
+
+	var memoryTotal, memoryAvailable, memoryCached float64
+	var hasTotal, hasAvailable, hasCached bool
+	for scanner.Scan() {
+		line := scanner.Text()
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+
+		switch fields[0] {
+		case "MemTotal:":
+			value, err := parseMemInfoValue(fields)
+			if err != nil {
+				return 0, 0, 0, err
+			}
+			memoryTotal = value
+			hasTotal = true
+		case "MemAvailable:":
+			value, err := parseMemInfoValue(fields)
+			if err != nil {
+				return 0, 0, 0, err
+			}
+			memoryAvailable = value
+			hasAvailable = true
+		case "Cached:":
+			value, err := parseMemInfoValue(fields)
+			if err != nil {
+				return 0, 0, 0, err
+			}
+			memoryCached = value
+			hasCached = true
+		}
+	}
+
+	if scanner.Err() != nil {
+		return 0, 0, 0, errors.Wrap(scanner.Err(), "Failed to scan /proc/meminfo")
+	}
+	if !hasTotal || !hasAvailable || !hasCached {
+		return 0, 0, 0, fmt.Errorf("missing meminfo fields: total=%t available=%t cached=%t", hasTotal, hasAvailable, hasCached)
+	}
+	if memoryTotal <= 0 {
+		return 0, 0, 0, errors.New("MemTotal must be greater than zero")
+	}
+
+	return memoryTotal, memoryAvailable, memoryCached, nil
+}
+
+func parseMemInfoValue(fields []string) (float64, error) {
+	value, err := strconv.ParseFloat(fields[1], 64)
+	if err != nil {
+		return 0, errors.Wrapf(err, "parse meminfo value %q", fields[1])
+	}
+	return value, nil
 }
 
 func (mt *metric) Once(measure *measure.Measure) error {

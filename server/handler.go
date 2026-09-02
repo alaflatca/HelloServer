@@ -94,6 +94,12 @@ func (svr *server) handlePeriod(c fiber.Ctx) error {
 		rsp.Elapse = time.Since(now).String()
 		return c.Status(http.StatusBadRequest).JSON(rsp)
 	}
+	const maxDuration = time.Duration(1<<63 - 1)
+	if req.Period > int64(maxDuration/time.Second) {
+		rsp.Reason = "invalid period ( period is too large )"
+		rsp.Elapse = time.Since(now).String()
+		return c.Status(http.StatusBadRequest).JSON(rsp)
+	}
 
 	if err := event.Publish("period", time.Duration(req.Period)*time.Second); err != nil {
 		rsp.Reason = err.Error()

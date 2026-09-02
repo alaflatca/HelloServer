@@ -24,7 +24,11 @@ func (mt *metric) Process(ms *measure.Measure) error {
 		return errors.Wrap(err, "Failed to syscall Statfs")
 	}
 	diskAll := float64(fs.Blocks * uint64(fs.Bsize))
+	if diskAll == 0 {
+		return errors.New("disk size is zero")
+	}
 	diskAvail := float64(fs.Bavail * uint64(fs.Bsize))
+	ms.Disk.Path = mt.defaultPath
 	ms.Disk.All = diskAll / measure.GB
 	ms.Disk.Avail = diskAvail / measure.GB
 	ms.Disk.Used = (diskAll - diskAvail) / measure.GB

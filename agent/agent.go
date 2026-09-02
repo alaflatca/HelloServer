@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"context"
+	"errors"
 	"helloServer/agent/metrics/cpu"
 	"helloServer/agent/metrics/disk"
 	"helloServer/agent/metrics/memory"
@@ -10,7 +12,7 @@ import (
 	"helloServer/event"
 	"helloServer/measure"
 	"log"
-	"os"
+	"sync"
 	"time"
 )
 
@@ -18,8 +20,10 @@ type Agent struct {
 	processor []Processor
 	measure   measure.Measure
 	period    time.Duration
-	breakFlag bool
 	debugFlag bool
+	periodCh  chan time.Duration
+	cancelMu  sync.Mutex
+	cancel    context.CancelFunc
 }
 
 type Processor interface {
@@ -27,51 +31,95 @@ type Processor interface {
 	Once(*measure.Measure) error
 }
 
-func (a *Agent) addmetric(process ...Processor) {
+func (a *Agent) addmetric(process ...Processor) error {
 	if len(process) < 1 {
-		log.Println("Requires at least one required metric")
-		os.Exit(1)
+		return errors.New("requires at least one metric processor")
 	}
 
 	a.processor = make([]Processor, 0, len(process))
 	a.processor = append(a.processor, process...)
+	return nil
 }
 
 func New() *Agent {
-	return &Agent{measure: measure.Measure{}, period: 1 * time.Second, debugFlag: true}
+	return &Agent{
+		measure:   measure.Measure{},
+		period:    1 * time.Second,
+		debugFlag: true,
+		periodCh:  make(chan time.Duration, 1),
+	}
 }
 
-func (a *Agent) Start() {
-	a.addmetric(system.New(), cpu.New(), memory.New(), disk.New(), network.New())
+func (a *Agent) Start(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	a.cancelMu.Lock()
+	a.cancel = cancel
+	a.cancelMu.Unlock()
+	defer func() {
+		cancel()
+		a.cancelMu.Lock()
+		a.cancel = nil
+		a.cancelMu.Unlock()
+	}()
+
+	if err := a.addmetric(system.New(), cpu.New(), memory.New(), disk.New(), network.New()); err != nil {
+		return err
+	}
 
 	event.Subscribe("period", func(data interface{}) {
 		period, ok := data.(time.Duration)
 		if !ok {
 			return
 		}
-		a.period = period
+		a.UpdatePeriod(period)
 	})
 
-	a.Run()
+	return a.Run(ctx)
 }
 
 func (a *Agent) Close() {
 	log.Println("Agent Close")
-	a.breakFlag = true
+	a.cancelMu.Lock()
+	cancel := a.cancel
+	a.cancelMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 }
 
-func (a *Agent) Run() {
+func (a *Agent) UpdatePeriod(period time.Duration) {
+	if period <= 0 {
+		return
+	}
+
+	select {
+	case a.periodCh <- period:
+	default:
+		select {
+		case <-a.periodCh:
+		default:
+		}
+		select {
+		case a.periodCh <- period:
+		default:
+		}
+	}
+}
+
+func (a *Agent) Run(ctx context.Context) error {
 	ms := &measure.Measure{}
 
 	if err := a.OnceProcess(ms); err != nil {
-		panic(err) // OnceProcess 는 반드시 실행, 에러 발생 시 패닉 후 에러 파악
+		return err
 	}
 
-	for !a.breakFlag {
+	ticker := time.NewTicker(a.period)
+	defer ticker.Stop()
+
+	for {
 		for i := 0; i < len(a.processor); i++ {
 			if err := a.processor[i].Process(ms); err != nil {
 				log.Printf("[%d] processor error: %s", i, err.Error())
-				// TODO... error 처리 작성
 			}
 		}
 
@@ -80,7 +128,16 @@ func (a *Agent) Run() {
 		}
 
 		cache.Set("l", ms)
-		time.Sleep(a.period)
+
+		select {
+		case <-ctx.Done():
+			return nil
+		case period := <-a.periodCh:
+			a.period = period
+			ticker.Reset(period)
+			log.Printf("Agent period changed: %s", period)
+		case <-ticker.C:
+		}
 	}
 }
 
