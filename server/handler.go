@@ -36,7 +36,7 @@ func (svr *server) handleMetrics(c fiber.Ctx) error {
 
 	metric := strings.ToLower(c.Params("metric"))
 	switch metric {
-	case "all":
+	case "":
 		rsp.Data = data
 	case "cpu":
 		rsp.Data = data.Cpu

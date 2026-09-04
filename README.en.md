@@ -1,27 +1,27 @@
 # Hello, Server!
 
-[English](README.en.md)
+[한국어](README.md)
 
-Go 기반 Linux 서버 모니터링 에이전트입니다.
+A Go-based Linux server monitoring agent.
 
-Agent가 주기적으로 시스템 metric을 수집하고, Fiber 기반 HTTP server가 최신 snapshot을 REST API로 제공합니다.
+The agent periodically collects system metrics, and the Fiber HTTP server exposes the latest snapshot through a REST API.
 
-## 주요 기능
+## Features
 
-- CPU, memory, disk, network, system metric 수집
-- `/proc/stat` 기반 CPU 사용률 계산
-- loopback이 아닌 활성 네트워크 인터페이스 자동 선택
-- 수집 주기 변경 API 제공
-- thread-safe metric snapshot cache
-- `context.Context`와 `time.Ticker` 기반 lifecycle 관리
+- Collects CPU, memory, disk, network, and system metrics
+- Calculates CPU usage from `/proc/stat`
+- Selects an active non-loopback network interface automatically
+- Provides an API for changing the collection period
+- Uses a thread-safe metric snapshot cache
+- Manages the collector lifecycle with `context.Context` and `time.Ticker`
 
-## 실행
+## Run
 
 ```bash
 go run .
 ```
 
-기본 포트는 `9227`입니다.
+The default port is `9227`.
 
 ```bash
 curl http://localhost:9227/health
@@ -30,19 +30,19 @@ curl http://localhost:9227/api/metrics
 
 ## API
 
-| Method | URL | 설명 |
+| Method | URL | Description |
 |:--:|:---|:---|
-| GET | `/health` | 상태 확인 |
-| GET | `/api/metrics` | 전체 metric 조회 |
-| GET | `/api/metrics/cpu` | CPU metric 조회 |
-| GET | `/api/metrics/disk` | Disk metric 조회 |
-| GET | `/api/metrics/memory` | Memory metric 조회 |
-| GET | `/api/metrics/network` | Network metric 조회 |
-| GET | `/api/metrics/system` | System metric 조회 |
-| GET | `/api/processes` | process 목록 조회 |
-| PUT | `/api/agent/period` | 수집 주기 변경 |
+| GET | `/health` | Health check |
+| GET | `/api/metrics` | Get all metrics |
+| GET | `/api/metrics/cpu` | Get CPU metrics |
+| GET | `/api/metrics/disk` | Get disk metrics |
+| GET | `/api/metrics/memory` | Get memory metrics |
+| GET | `/api/metrics/network` | Get network metrics |
+| GET | `/api/metrics/system` | Get system metrics |
+| GET | `/api/processes` | Get process list |
+| PUT | `/api/agent/period` | Change collection period |
 
-수집 주기는 초 단위입니다.
+The collection period is measured in seconds.
 
 ```bash
 curl -X PUT http://localhost:9227/api/agent/period \
@@ -50,7 +50,7 @@ curl -X PUT http://localhost:9227/api/agent/period \
   -d '{"period":3}'
 ```
 
-## 응답 예시
+## Response Examples
 
 <details>
 <summary>GET /health</summary>
@@ -242,7 +242,7 @@ Response
 
 </details>
 
-## 테스트
+## Test
 
 ```bash
 go test ./...
@@ -250,14 +250,14 @@ go test -race ./...
 go vet ./...
 ```
 
-Go build cache 권한이 제한된 환경에서는 다음처럼 cache 위치를 지정할 수 있습니다.
+If the Go build cache is not writable, set a cache path explicitly.
 
 ```bash
 GOCACHE=/tmp/helloserver-gocache go test ./...
 ```
 
-## 참고
+## Notes
 
-- Linux `/proc` 파일 시스템을 전제로 합니다.
-- CSV 파일은 `store/` 디렉터리 아래에 생성됩니다.
-- `test/client_test.go`는 오래된 TCP client 테스트라 기본적으로 skip됩니다.
+- This project targets Linux environments with `/proc`.
+- CSV files are created under `store/`.
+- `test/client_test.go` is a legacy TCP client test and is skipped by default.

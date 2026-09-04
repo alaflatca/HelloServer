@@ -27,15 +27,19 @@ func (svr *server) Close() error {
 }
 
 func (svr *server) Start() error {
+	svr.registerRoutes()
+	return svr.app.Listen(":9227")
+}
+
+func (svr *server) registerRoutes() {
 	svr.app.Use(recover.New())
 
+	svr.app.Get("/api/metrics", svr.handleMetrics)
 	svr.app.Get("/api/metrics/:metric", svr.handleMetrics)
-	svr.app.Get("/api/process", svr.handleProcessList)
-	svr.app.Put("/api/period", svr.handlePeriod)
+	svr.app.Get("/api/processes", svr.handleProcessList)
+	svr.app.Put("/api/agent/period", svr.handlePeriod)
 
 	svr.app.Get("/health", func(c fiber.Ctx) error {
 		return c.SendStatus(http.StatusOK)
 	})
-
-	return svr.app.Listen(":9227")
 }
